@@ -1,6 +1,6 @@
 import { Interception } from 'cypress/types/net-stubbing'
 import { uniqBy, reverse, omit } from 'lodash'
-import { AliasType, Interaction, PactConfigType, XHRRequestAndResponse, PactFileType, HeaderType } from 'types'
+import { AliasType, Interaction, PactConfigType, XHRRequestAndResponse, PactFileType, HeaderType, MatchingRule } from 'types'
 const pjson = require('../package.json')
 export const formatAlias = (alias: AliasType) => {
   if (Array.isArray(alias)) {
@@ -31,6 +31,31 @@ export const writePact = ({ intercept, testCaseTitle, pactConfig, blocklist }: P
     })
 }
 
+function omitElementsFromResponseBody(responseBody: any, elementsToOmit: string[]): any {
+  function omitElement(obj: any, key: string) {
+    if (Array.isArray(obj)) {
+      obj.forEach((item) => {
+        omitElement(item, key);
+      });
+    } else if (typeof obj === "object" && obj !== null) {
+      for (const objKey in obj) {
+        if (objKey === key) {
+          delete obj[key];
+        } else {
+          omitElement(obj[objKey], key);
+        }
+      }
+    }
+  }
+
+  const modifiedBody = JSON.parse(JSON.stringify(responseBody));
+  elementsToOmit.forEach((element) => {
+    omitElement(modifiedBody, element);
+  });
+
+  return modifiedBody;
+}
+
 export const omitHeaders = (headers: HeaderType, blocklist: string[]) => {
   return omit(headers, [...blocklist])
 }
@@ -43,6 +68,9 @@ const constructInteraction = (
   const path = new URL(intercept.request.url).pathname
   const search = new URL(intercept.request.url).search
   const query = new URLSearchParams(search).toString()
+  const elementsToOmit = ["metadata"];
+  const responseBody  = omitElementsFromResponseBody(intercept.response?.body, elementsToOmit);
+  const generatedRules = generateMatchingRules(responseBody, "$.body");
   return {
     description: testTitle,
     providerState: '',
@@ -56,11 +84,39 @@ const constructInteraction = (
     response: {
       status: intercept.response?.statusCode,
       headers: omitHeaders(intercept.response?.headers, blocklist),
-      body: intercept.response?.body
+      body: responseBody,
+      matchingRules: generatedRules,
     }
   }
 }
-export const constructPactFile = ({ intercept, testCaseTitle, pactConfig, blocklist = [], content }: PactFileType) => {
+
+
+function generateMatchingRules(responseBody: any, parentPath = "$.body"): MatchingRule {
+  const matchingRules: MatchingRule = {};
+
+  function traverseObject(obj: any, path: string = "") {
+    if (typeof obj === "object" && !Array.isArray(obj)) {
+      for (const key in obj) {
+        const newPath = path ? `${path}.${key}` : key;
+        traverseObject(obj[key], newPath);
+      }
+    } else if (Array.isArray(obj)) {
+      obj.forEach((item, index) => {
+        const newPath = `${path}[${index}]`;
+        traverseObject(item, newPath);
+      });
+    } else {
+      const rulePath = `${parentPath}.${path}`;
+      matchingRules[rulePath] = { match: "type" };
+    }
+  }
+
+  traverseObject(responseBody);
+
+  return matchingRules;
+}
+
+export const constructPactFile = ({ intercept, testCaseTitle, pactConfig, blocklist = [], content}: PactFileType) => {
   const pactSkeletonObject = {
     consumer: { name: pactConfig.consumerName },
     provider: { name: pactConfig.providerName },

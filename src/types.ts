@@ -27,6 +27,7 @@ export type Interaction = {
   } & BaseXHR
   response: {
     status: string | number | undefined
+    matchingRules: MatchingRule
   } & BaseXHR
 }
 
@@ -76,3 +77,9 @@ export type PactFileType = {
   blocklist?: string[],
   content?: any 
 }
+
+export type MatchingRule = {
+  [key: string]: {
+    match: string;
+  };
+};
