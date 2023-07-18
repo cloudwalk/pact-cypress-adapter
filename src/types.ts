@@ -27,16 +27,16 @@ export type Interaction = {
   } & BaseXHR
   response: {
     status: string | number | undefined
-    matchingRules: MatchingRule
+    matchingRules?: MatchingRule
   } & BaseXHR
 }
 
 export type XHRRequestAndResponse = {
   request:
-    | {
-        method: string
-        url: string
-      } & BaseXHR
+  | {
+    method: string
+    url: string
+  } & BaseXHR
   response: {
     statusCode: string | number | undefined
     statusText: string | undefined
@@ -75,7 +75,9 @@ export type PactFileType = {
   testCaseTitle: string
   pactConfig: PactConfigType
   blocklist?: string[],
-  content?: any 
+  omitList?: string[],
+  autoMatching?: boolean,
+  content?: any
 }
 
 export type MatchingRule = {

@@ -36,7 +36,7 @@ const setupPactHeaderBlocklist = (headers: string[]) => {
   headersBlocklist = [...headers, ...headersBlocklist]
 }
 
-const usePactWait = (alias: AliasType) => {
+const usePactWait = (alias: AliasType, omitList: string[] = [], autoMatching: boolean = false) => {
   const formattedAlias = formatAlias(alias)
   // Cypress versions older than 8.2 do not have a currentTest objects
   const testCaseTitle = Cypress.currentTest ? Cypress.currentTest.title : ''
@@ -48,7 +48,9 @@ const usePactWait = (alias: AliasType) => {
           intercept,
           testCaseTitle: `${testCaseTitle}-${formattedAlias[index]}`,
           pactConfig,
-          blocklist: headersBlocklist
+          blocklist: headersBlocklist,
+          omitList,
+          autoMatching
         })
       })
     })
@@ -59,7 +61,9 @@ const usePactWait = (alias: AliasType) => {
         intercept: flattenIntercept,
         testCaseTitle: `${testCaseTitle}`,
         pactConfig,
-        blocklist: headersBlocklist
+        blocklist: headersBlocklist,
+        omitList,
+        autoMatching
       })
     })
   }

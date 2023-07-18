@@ -12,15 +12,15 @@ export const formatAlias = (alias: AliasType) => {
 const constructFilePath = ({ consumerName, providerName }: PactConfigType) =>
   `cypress/pacts/${providerName}-${consumerName}.json`
 
-export const writePact = ({ intercept, testCaseTitle, pactConfig, blocklist }: PactFileType) => {
+export const writePact = ({ intercept, testCaseTitle, pactConfig, blocklist, omitList, autoMatching }: PactFileType) => {
   const filePath = constructFilePath(pactConfig)
   cy.task('readFile', filePath)
     .then((content) => {
       if (content) {
         const parsedContent = JSON.parse(content as string)
-        return constructPactFile({ intercept, testCaseTitle, pactConfig, blocklist, content: parsedContent })
+        return constructPactFile({ intercept, testCaseTitle, pactConfig, blocklist, omitList, autoMatching, content: parsedContent })
       } else {
-        return constructPactFile({ intercept, testCaseTitle, pactConfig, blocklist })
+        return constructPactFile({ intercept, testCaseTitle, pactConfig, blocklist, omitList, autoMatching })
       }
     })
     .then((data) => {
@@ -48,12 +48,11 @@ function omitElementsFromResponseBody(responseBody: any, elementsToOmit: string[
     }
   }
 
-  const modifiedBody = JSON.parse(JSON.stringify(responseBody));
   elementsToOmit.forEach((element) => {
-    omitElement(modifiedBody, element);
+    omitElement(responseBody, element);
   });
 
-  return modifiedBody;
+  return responseBody;
 }
 
 export const omitHeaders = (headers: HeaderType, blocklist: string[]) => {
@@ -63,15 +62,17 @@ export const omitHeaders = (headers: HeaderType, blocklist: string[]) => {
 const constructInteraction = (
   intercept: Interception | XHRRequestAndResponse,
   testTitle: string,
-  blocklist: string[]
+  blocklist: string[],
+  omitList: string[],
+  autoMatching: boolean
 ): Interaction => {
   const path = new URL(intercept.request.url).pathname
   const search = new URL(intercept.request.url).search
   const query = new URLSearchParams(search).toString()
-  const elementsToOmit = ["metadata"];
-  const responseBody  = omitElementsFromResponseBody(intercept.response?.body, elementsToOmit);
+  const responseBody = omitElementsFromResponseBody(intercept.response?.body, omitList);
   const generatedRules = generateMatchingRules(responseBody, "$.body");
-  return {
+
+  const interation: Interaction = {
     description: testTitle,
     providerState: '',
     request: {
@@ -85,11 +86,13 @@ const constructInteraction = (
       status: intercept.response?.statusCode,
       headers: omitHeaders(intercept.response?.headers, blocklist),
       body: responseBody,
-      matchingRules: generatedRules,
     }
   }
-}
 
+  if (autoMatching) { interation.response.matchingRules = generatedRules }
+
+  return interation
+}
 
 function generateMatchingRules(responseBody: any, parentPath = "$.body"): MatchingRule {
   const matchingRules: MatchingRule = {};
@@ -116,7 +119,7 @@ function generateMatchingRules(responseBody: any, parentPath = "$.body"): Matchi
   return matchingRules;
 }
 
-export const constructPactFile = ({ intercept, testCaseTitle, pactConfig, blocklist = [], content}: PactFileType) => {
+export const constructPactFile = ({ intercept, testCaseTitle, pactConfig, blocklist = [], omitList = [], autoMatching = false, content }: PactFileType) => {
   const pactSkeletonObject = {
     consumer: { name: pactConfig.consumerName },
     provider: { name: pactConfig.providerName },
@@ -133,7 +136,7 @@ export const constructPactFile = ({ intercept, testCaseTitle, pactConfig, blockl
   }
 
   if (content) {
-    const interactions = [...content.interactions, constructInteraction(intercept, testCaseTitle, blocklist)]
+    const interactions = [...content.interactions, constructInteraction(intercept, testCaseTitle, blocklist, omitList, autoMatching)]
     const nonDuplicatesInteractions = reverse(uniqBy(reverse(interactions), 'description'))
     const data = {
       ...pactSkeletonObject,
@@ -145,7 +148,7 @@ export const constructPactFile = ({ intercept, testCaseTitle, pactConfig, blockl
 
   return {
     ...pactSkeletonObject,
-    interactions: [...pactSkeletonObject.interactions, constructInteraction(intercept, testCaseTitle, blocklist)]
+    interactions: [...pactSkeletonObject.interactions, constructInteraction(intercept, testCaseTitle, blocklist, omitList, autoMatching)]
   }
 }
 
