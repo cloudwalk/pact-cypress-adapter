@@ -112,6 +112,65 @@ describe('constructPactFile', () => {
     expect(result.provider.name).toBe('todo-api')
     expect(result.interactions.length).toBe(1)
   })
+
+  it('should create a file with matchingRules when requested', () => {
+    const newIntercept = {
+      request: {
+        method: 'POST',
+        url: 'https://localhost:3000/create',
+        body: 'hello'
+      },
+      response: {
+        statusCode: 201,
+        statusText: 'Created',
+        body: {
+          reply: 'bye'
+        }
+      }
+    } as XHRRequestAndResponse
+
+    const result = constructPactFile({
+      intercept: newIntercept,
+      testCaseTitle: 'create todo',
+      pactConfig: {
+        consumerName: 'ui-consumer',
+        providerName: 'todo-api'
+      },
+      autoMatching: true
+    })
+    expect(result.interactions.length).toBe(1)
+    expect(result.interactions[0].response.matchingRules).toStrictEqual({ "$.body.reply": { "match": "type" } })
+  })
+
+  it('should create a file omitting reponse elements when requested', () => {
+    const newIntercept = {
+      request: {
+        method: 'POST',
+        url: 'https://localhost:3000/create',
+        body: 'hello'
+      },
+      response: {
+        statusCode: 201,
+        statusText: 'Created',
+        body: {
+          reply: 'bye',
+          omit: 'ok'
+        }
+      }
+    } as XHRRequestAndResponse
+
+    const result = constructPactFile({
+      intercept: newIntercept,
+      testCaseTitle: 'create todo',
+      pactConfig: {
+        consumerName: 'ui-consumer',
+        providerName: 'todo-api'
+      },
+      omitList: ["omit"]
+    })
+    expect(result.interactions.length).toBe(1)
+    expect(result.interactions[0].response.body).toStrictEqual({ "reply": "bye" })
+  })
 })
 
 describe('readFile', () => {

@@ -121,6 +121,24 @@ after(() => {
 
 ```
 
+### cy.usePactWait([alias] | alias, [omitList], autoMatching)
+Listen to aliased `cy.intercept` network call(s), record network request and response to a pact file with automatic matching rules of "type" or omit response elements not used by the consumer
+
+**Example**
+```js
+before(() => {
+    cy.setupPact('ui-consumer', 'api-provider')
+    cy.intercept('GET', '/users').as('getAllUsers')
+})
+
+//... cypress test
+
+after(() => {
+    cy.usePactWait(['getAllUsers'], ['element_b', 'element_b'], true)
+})
+
+```
+
 ### cy.setupPactHeaderBlocklist([headers])
 Add a list of headers that will be excluded in a pact at test case level
 
