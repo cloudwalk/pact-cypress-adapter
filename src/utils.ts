@@ -1,6 +1,6 @@
 import { Interception } from 'cypress/types/net-stubbing'
 import { uniqBy, reverse, omit } from 'lodash'
-import { AliasType, Interaction, PactConfigType, XHRRequestAndResponse, PactFileType, HeaderType } from 'types'
+import { AliasType, Interaction, PactConfigType, XHRRequestAndResponse, PactFileType, HeaderType, MatchingRule } from 'types'
 const pjson = require('../package.json')
 export const formatAlias = (alias: AliasType) => {
   if (Array.isArray(alias)) {
@@ -12,15 +12,15 @@ export const formatAlias = (alias: AliasType) => {
 const constructFilePath = ({ consumerName, providerName }: PactConfigType) =>
   `cypress/pacts/${providerName}-${consumerName}.json`
 
-export const writePact = ({ intercept, testCaseTitle, pactConfig, blocklist }: PactFileType) => {
+export const writePact = ({ intercept, testCaseTitle, pactConfig, blocklist, omitList, autoMatching }: PactFileType) => {
   const filePath = constructFilePath(pactConfig)
   cy.task('readFile', filePath)
     .then((content) => {
       if (content) {
         const parsedContent = JSON.parse(content as string)
-        return constructPactFile({ intercept, testCaseTitle, pactConfig, blocklist, content: parsedContent })
+        return constructPactFile({ intercept, testCaseTitle, pactConfig, blocklist, omitList, autoMatching, content: parsedContent })
       } else {
-        return constructPactFile({ intercept, testCaseTitle, pactConfig, blocklist })
+        return constructPactFile({ intercept, testCaseTitle, pactConfig, blocklist, omitList, autoMatching })
       }
     })
     .then((data) => {
@@ -31,6 +31,30 @@ export const writePact = ({ intercept, testCaseTitle, pactConfig, blocklist }: P
     })
 }
 
+function omitElementsFromResponseBody(responseBody: any, elementsToOmit: string[]): any {
+  function omitElement(obj: any, key: string) {
+    if (Array.isArray(obj)) {
+      obj.forEach((item) => {
+        omitElement(item, key);
+      });
+    } else if (typeof obj === "object" && obj !== null) {
+      for (const objKey in obj) {
+        if (objKey === key) {
+          delete obj[key];
+        } else {
+          omitElement(obj[objKey], key);
+        }
+      }
+    }
+  }
+
+  elementsToOmit.forEach((element) => {
+    omitElement(responseBody, element);
+  });
+
+  return responseBody;
+}
+
 export const omitHeaders = (headers: HeaderType, blocklist: string[]) => {
   return omit(headers, [...blocklist])
 }
@@ -38,12 +62,17 @@ export const omitHeaders = (headers: HeaderType, blocklist: string[]) => {
 const constructInteraction = (
   intercept: Interception | XHRRequestAndResponse,
   testTitle: string,
-  blocklist: string[]
+  blocklist: string[],
+  omitList: string[],
+  autoMatching: boolean
 ): Interaction => {
   const path = new URL(intercept.request.url).pathname
   const search = new URL(intercept.request.url).search
   const query = new URLSearchParams(search).toString()
-  return {
+  const responseBody = omitElementsFromResponseBody(intercept.response?.body, omitList);
+  const generatedRules = generateMatchingRules(responseBody, "$.body");
+
+  const interation: Interaction = {
     description: testTitle,
     providerState: '',
     request: {
@@ -56,11 +85,41 @@ const constructInteraction = (
     response: {
       status: intercept.response?.statusCode,
       headers: omitHeaders(intercept.response?.headers, blocklist),
-      body: intercept.response?.body
+      body: responseBody,
     }
   }
+
+  if (autoMatching) { interation.response.matchingRules = generatedRules }
+
+  return interation
 }
-export const constructPactFile = ({ intercept, testCaseTitle, pactConfig, blocklist = [], content }: PactFileType) => {
+
+function generateMatchingRules(responseBody: any, parentPath = "$.body"): MatchingRule {
+  const matchingRules: MatchingRule = {};
+
+  function traverseObject(obj: any, path: string = "") {
+    if (typeof obj === "object" && !Array.isArray(obj)) {
+      for (const key in obj) {
+        const newPath = path ? `${path}.${key}` : key;
+        traverseObject(obj[key], newPath);
+      }
+    } else if (Array.isArray(obj)) {
+      obj.forEach((item, index) => {
+        const newPath = `${path}[${index}]`;
+        traverseObject(item, newPath);
+      });
+    } else {
+      const rulePath = `${parentPath}.${path}`;
+      matchingRules[rulePath] = { match: "type" };
+    }
+  }
+
+  traverseObject(responseBody);
+
+  return matchingRules;
+}
+
+export const constructPactFile = ({ intercept, testCaseTitle, pactConfig, blocklist = [], omitList = [], autoMatching = false, content }: PactFileType) => {
   const pactSkeletonObject = {
     consumer: { name: pactConfig.consumerName },
     provider: { name: pactConfig.providerName },
@@ -77,7 +136,7 @@ export const constructPactFile = ({ intercept, testCaseTitle, pactConfig, blockl
   }
 
   if (content) {
-    const interactions = [...content.interactions, constructInteraction(intercept, testCaseTitle, blocklist)]
+    const interactions = [...content.interactions, constructInteraction(intercept, testCaseTitle, blocklist, omitList, autoMatching)]
     const nonDuplicatesInteractions = reverse(uniqBy(reverse(interactions), 'description'))
     const data = {
       ...pactSkeletonObject,
@@ -89,7 +148,7 @@ export const constructPactFile = ({ intercept, testCaseTitle, pactConfig, blockl
 
   return {
     ...pactSkeletonObject,
-    interactions: [...pactSkeletonObject.interactions, constructInteraction(intercept, testCaseTitle, blocklist)]
+    interactions: [...pactSkeletonObject.interactions, constructInteraction(intercept, testCaseTitle, blocklist, omitList, autoMatching)]
   }
 }
 

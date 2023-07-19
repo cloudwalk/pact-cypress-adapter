@@ -7,7 +7,7 @@ declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Cypress {
     interface Chainable {
-      usePactWait: (alias: AliasType) => Chainable
+      usePactWait: (alias: AliasType, omitList?: string[], autoMatching?: boolean) => Chainable
       usePactRequest: (option: AnyObject, alias: string) => Chainable
       usePactGet: (alias: string, pactConfig: PactConfigType) => Chainable
       setupPact: (consumerName: string, providerName: string) => Chainable<null>
@@ -36,7 +36,7 @@ const setupPactHeaderBlocklist = (headers: string[]) => {
   headersBlocklist = [...headers, ...headersBlocklist]
 }
 
-const usePactWait = (alias: AliasType) => {
+const usePactWait = (alias: AliasType, omitList: string[] = [], autoMatching: boolean = false) => {
   const formattedAlias = formatAlias(alias)
   // Cypress versions older than 8.2 do not have a currentTest objects
   const testCaseTitle = Cypress.currentTest ? Cypress.currentTest.title : ''
@@ -48,7 +48,9 @@ const usePactWait = (alias: AliasType) => {
           intercept,
           testCaseTitle: `${testCaseTitle}-${formattedAlias[index]}`,
           pactConfig,
-          blocklist: headersBlocklist
+          blocklist: headersBlocklist,
+          omitList,
+          autoMatching
         })
       })
     })
@@ -59,7 +61,9 @@ const usePactWait = (alias: AliasType) => {
         intercept: flattenIntercept,
         testCaseTitle: `${testCaseTitle}`,
         pactConfig,
-        blocklist: headersBlocklist
+        blocklist: headersBlocklist,
+        omitList,
+        autoMatching
       })
     })
   }

@@ -19,7 +19,8 @@
     "test": "jest --testPathPattern=test",
     "build": "tsc",
     "test:example": "cd example/todo-example && npm i && npm run build && npm run http-server && npm run cypress:run",
-    "release": "standard-version"
+    "release": "standard-version",
+    "prepare": "npm run build"
   },
   "author": "",
   "license": "MIT",
