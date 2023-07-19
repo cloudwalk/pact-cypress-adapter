@@ -7,7 +7,7 @@ declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Cypress {
     interface Chainable {
-      usePactWait: (alias: AliasType) => Chainable
+      usePactWait: (alias: AliasType, omitList?: string[], autoMatching?: boolean) => Chainable
       usePactRequest: (option: AnyObject, alias: string) => Chainable
       usePactGet: (alias: string, pactConfig: PactConfigType) => Chainable
       setupPact: (consumerName: string, providerName: string) => Chainable<null>
